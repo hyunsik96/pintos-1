@@ -93,11 +93,11 @@ void timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	if (timer_elapsed (start) < ticks){
-		thread_sleep(ticks);	// sleep que에 넣어줌
+	// if (timer_elapsed (start) < ticks){
+		thread_sleep(start + ticks);	// sleep que에 넣어줌
 		
 		// 	// global tick 갱신
-	}
+	// }
 		// thread_yield ();
 }
 
@@ -129,7 +129,6 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-
 	if (ticks >= get_next_tick_to_awake())
 		thread_awake(ticks);
 	

@@ -326,26 +326,20 @@ void thread_yield (void) {
 
 void thread_sleep(int64_t ticks)
 {
-	printf("@@@@@@@@@@@@check000000000");
 	enum intr_level old_level;
 	struct thread *curr = thread_current ();
 	
-	printf("@@@@@@@@@@@@check1111");
 	old_level = intr_disable ();
-		printf("@@@@@@@@@@@@check11113333332212");
-
 	curr -> wakeup_tick = ticks;
-		printf("@@@@@@@@@@@@check1111xxxxxxxx");
 
-	do_schedule(THREAD_BLOCKED);
-	printf("###############################");
+	// do_schedule(THREAD_BLOCKED);
 	// 슬립리스트에 넣기
 	if (curr != idle_thread){
 		list_push_back(&sleep_list,&curr->elem);
 		next_tick_to_awake = next_tick_to_awake 
 		< ticks ? next_tick_to_awake : ticks;
-		printf("@@@@@@@@@@@@check33333333");
 	}
+	do_schedule(THREAD_BLOCKED);
 
 	intr_set_level (old_level);
 }
@@ -356,35 +350,28 @@ int64_t get_next_tick_to_awake(void)  {
 }
 
 void update_next_tick_to_awake(int64_t ticks) {
-	next_tick_to_awake = INT64_MAX;	// 최댓값으로 설정
 	
-	struct list_elem *e = list_begin(&sleep_list);
-	while(e != list_end(&sleep_list)) {
-		struct thread *t = list_entry(e, struct thread, elem);
-		next_tick_to_awake = next_tick_to_awake 
-		< t->wakeup_tick ? next_tick_to_awake:t->wakeup_tick;
-		e = list_next(e);
-	}
+	return	next_tick_to_awake = next_tick_to_awake < ticks
+	? next_tick_to_awake: ticks;
+
 }
 void thread_awake(int64_t ticks) {
-	// tick 보다 크거나 같은 쓰레드 깨워준다 (yield)
+	// tick 보다 작거나 같은 쓰레드 깨워준다 
 	// 작은값 다시 갱신
 	struct list_elem *e;
-	for (e = list_begin(&sleep_list) ; e != list_end(&sleep_list); e=list_next(e))
+	for (e = list_begin(&sleep_list) ; e != list_end(&sleep_list);)
 	{
 		struct thread *t = list_entry(e, struct thread, elem);
-		if (t->wakeup_tick >= ticks){
-				printf("@@@@@@@@@@@@check1111");
-				thread_yield();
-				printf("@@@@@@@@@@@@check22222");
-
-				list_remove(e);
+		if (t->wakeup_tick <= ticks){
+				e = list_remove(&t->elem);
+				thread_unblock(t);
 				
 		}
+		else{
+			update_next_tick_to_awake(t->wakeup_tick);
+			e=list_next(e);
+		}
 	}
-	
-	update_next_tick_to_awake(ticks);
-
 	
 }
 
@@ -615,7 +602,7 @@ do_schedule(int status) {
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
 		palloc_free_page(victim);
 	}
-	thread_current ()->status = status;	// 레디 상태로 바꿔주고
+	thread_current ()->status = status;	//  상태로 변경
 	schedule ();	// 스케쥴
 }
 
