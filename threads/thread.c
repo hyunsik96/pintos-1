@@ -28,6 +28,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* sleep list */
+static struct list sleep_list;
+
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -44,6 +48,10 @@ static struct list destruction_req;
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+
+// global tick
+static int64_t next_tick_to_awake = INT64_MAX;
+
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -107,8 +115,11 @@ thread_init (void) {
 
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
+	list_init (&sleep_list);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	
+	
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -133,10 +144,10 @@ thread_start (void) {
 	sema_down (&idle_started);
 }
 
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
-void
-thread_tick (void) {
+void thread_tick (void) {
 	struct thread *t = thread_current ();
 
 	/* Update statistics. */
@@ -150,13 +161,17 @@ thread_tick (void) {
 		kernel_ticks++;
 
 	/* Enforce preemption. */
-	if (++thread_ticks >= TIME_SLICE)
+	if (++thread_ticks >= TIME_SLICE){
+
+		//awake
 		intr_yield_on_return ();
+
+	}
+
 }
 
 /* Prints thread statistics. */
-void
-thread_print_stats (void) {
+void thread_print_stats (void) {
 	printf ("Thread: %lld idle ticks, %lld kernel ticks, %lld user ticks\n",
 			idle_ticks, kernel_ticks, user_ticks);
 }
@@ -264,6 +279,7 @@ thread_current (void) {
 	   of stack, so a few big automatic arrays or moderate
 	   recursion can cause stack overflow. */
 	ASSERT (is_thread (t));
+	
 	ASSERT (t->status == THREAD_RUNNING);
 
 	return t;
@@ -291,22 +307,88 @@ thread_exit (void) {
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
-
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
-void
-thread_yield (void) {
-	struct thread *curr = thread_current ();
-	enum intr_level old_level;
+void thread_yield (void) {
+	struct thread *curr = thread_current ();	// tid, 디버깅 위한 name, priority, 상태 담긴 현재 스레드의 상태를 가져옴
+	enum intr_level old_level;	// 동기화를 위해 인터럽트를 끌지 말지 설정
 
-	ASSERT (!intr_context ());
+// 스레드가 본인이 혹은 타이머가 인터럽트를 이르켜서 os에게 cpu 제어권이 돌아와 스레드의 context를 저장하고 제어권을 뺏을 상태로 ready 혹은 blocked 큐로 이동
 
-	old_level = intr_disable ();
-	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+	ASSERT (!intr_context ());	// 외부에서 인터럽트가 들어온게 아니라면 통과
+
+	old_level = intr_disable ();	// 꺼주기
+	if (curr != idle_thread)	// 현 쓰레드가 idle이 아니라면
+		list_push_back (&ready_list, &curr->elem);	// 현재 쓰레드를 ready_list tail 에 넣어주고, curr 를 list_elem 의 next로 넣어준다.
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
+
+void thread_sleep(int64_t ticks)
+{
+	printf("@@@@@@@@@@@@check000000000");
+	enum intr_level old_level;
+	struct thread *curr = thread_current ();
+	
+	printf("@@@@@@@@@@@@check1111");
+	old_level = intr_disable ();
+		printf("@@@@@@@@@@@@check11113333332212");
+
+	curr -> wakeup_tick = ticks;
+		printf("@@@@@@@@@@@@check1111xxxxxxxx");
+
+	do_schedule(THREAD_BLOCKED);
+	printf("###############################");
+	// 슬립리스트에 넣기
+	if (curr != idle_thread){
+		list_push_back(&sleep_list,&curr->elem);
+		next_tick_to_awake = next_tick_to_awake 
+		< ticks ? next_tick_to_awake : ticks;
+		printf("@@@@@@@@@@@@check33333333");
+	}
+
+	intr_set_level (old_level);
+}
+
+/* thread.c의 next_tick_to_awake반환*/
+int64_t get_next_tick_to_awake(void)  {
+	return next_tick_to_awake;
+}
+
+void update_next_tick_to_awake(int64_t ticks) {
+	next_tick_to_awake = INT64_MAX;	// 최댓값으로 설정
+	
+	struct list_elem *e = list_begin(&sleep_list);
+	while(e != list_end(&sleep_list)) {
+		struct thread *t = list_entry(e, struct thread, elem);
+		next_tick_to_awake = next_tick_to_awake 
+		< t->wakeup_tick ? next_tick_to_awake:t->wakeup_tick;
+		e = list_next(e);
+	}
+}
+void thread_awake(int64_t ticks) {
+	// tick 보다 크거나 같은 쓰레드 깨워준다 (yield)
+	// 작은값 다시 갱신
+	struct list_elem *e;
+	for (e = list_begin(&sleep_list) ; e != list_end(&sleep_list); e=list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, elem);
+		if (t->wakeup_tick >= ticks){
+				printf("@@@@@@@@@@@@check1111");
+				thread_yield();
+				printf("@@@@@@@@@@@@check22222");
+
+				list_remove(e);
+				
+		}
+	}
+	
+	update_next_tick_to_awake(ticks);
+
+	
+}
+
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
@@ -402,7 +484,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (t != NULL);
 	ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT (name != NULL);
-
 	memset (t, 0, sizeof *t);
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
@@ -529,20 +610,20 @@ static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
-	while (!list_empty (&destruction_req)) {
+	while (!list_empty (&destruction_req)) {	// 비어있지 않다면 ()
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
 		palloc_free_page(victim);
 	}
-	thread_current ()->status = status;
-	schedule ();
+	thread_current ()->status = status;	// 레디 상태로 바꿔주고
+	schedule ();	// 스케쥴
 }
 
 static void
 schedule (void) {
 	struct thread *curr = running_thread ();
 	struct thread *next = next_thread_to_run ();
-
+	
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
 	ASSERT (is_thread (next));
