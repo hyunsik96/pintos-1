@@ -66,11 +66,28 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters,&thread_current ()->elem,cmp_priority,NULL);
+		
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
 	sema->value--;
 	intr_set_level (old_level);
+}	
+
+bool cmp_sem_priority (const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED) {
+
+	struct semaphore_elem *sema1 = list_entry(a,struct semaphore_elem, elem);
+	struct semaphore_elem *sema2 = list_entry(b,struct semaphore_elem, elem);
+	
+	struct list *waiter_sema1 = &sema1->semaphore.waiters;
+	struct list *waiter_sema2 = &sema2->semaphore.waiters;
+
+	struct thread *t1 = list_entry(list_begin(waiter_sema1),struct thread,elem);
+	struct thread *t2 = list_entry(list_begin(waiter_sema2),struct thread,elem);
+
+	return t1->priority >= t2->priority;
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -107,12 +124,19 @@ sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
+	list_sort(&sema->waiters,cmp_priority,NULL);
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters))
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
+
+	// 우선순위 선점기능 추가
+	
 	sema->value++;
+
+	
+
 	intr_set_level (old_level);
 }
 
