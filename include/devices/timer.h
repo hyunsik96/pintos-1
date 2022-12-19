@@ -18,6 +18,10 @@ void timer_msleep (int64_t milliseconds);
 void timer_usleep (int64_t microseconds);
 void timer_nsleep (int64_t nanoseconds);
 
+// //추가
+// void thread_sleep(int64_t ticks);
+// tid_t thread_create(const char *name, int priority, thread_func *function, void *aux);
+
 void timer_print_stats (void);
 
 #endif /* devices/timer.h */

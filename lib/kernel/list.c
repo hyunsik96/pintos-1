@@ -35,8 +35,7 @@ static bool is_sorted (struct list_elem *a, struct list_elem *b,
 		list_less_func *less, void *aux) UNUSED;
 
 /* Returns true if ELEM is a head, false otherwise. */
-static inline bool
-is_head (struct list_elem *elem) {
+static inline bool is_head (struct list_elem *elem) {
 	return elem != NULL && elem->prev == NULL && elem->next != NULL;
 }
 
@@ -48,14 +47,12 @@ is_interior (struct list_elem *elem) {
 }
 
 /* Returns true if ELEM is a tail, false otherwise. */
-static inline bool
-is_tail (struct list_elem *elem) {
+static inline bool is_tail (struct list_elem *elem) {
 	return elem != NULL && elem->prev != NULL && elem->next == NULL;
 }
 
 /* Initializes LIST as an empty list. */
-void
-list_init (struct list *list) {
+void list_init (struct list *list) {
 	ASSERT (list != NULL);
 	list->head.prev = NULL;
 	list->head.next = &list->tail;
@@ -64,8 +61,7 @@ list_init (struct list *list) {
 }
 
 /* Returns the beginning of LIST.  */
-struct list_elem *
-list_begin (struct list *list) {
+struct list_elem * list_begin (struct list *list) {
 	ASSERT (list != NULL);
 	return list->head.next;
 }
@@ -73,8 +69,7 @@ list_begin (struct list *list) {
 /* Returns the element after ELEM in its list.  If ELEM is the
    last element in its list, returns the list tail.  Results are
    undefined if ELEM is itself a list tail. */
-struct list_elem *
-list_next (struct list_elem *elem) {
+struct list_elem * list_next (struct list_elem *elem) {
 	ASSERT (is_head (elem) || is_interior (elem));
 	return elem->next;
 }
@@ -84,16 +79,14 @@ list_next (struct list_elem *elem) {
    list_end() is often used in iterating through a list from
    front to back.  See the big comment at the top of list.h for
    an example. */
-struct list_elem *
-list_end (struct list *list) {
+struct list_elem * list_end (struct list *list) {
 	ASSERT (list != NULL);
 	return &list->tail;
 }
 
 /* Returns the LIST's reverse beginning, for iterating through
    LIST in reverse order, from back to front. */
-struct list_elem *
-list_rbegin (struct list *list) {
+struct list_elem * list_rbegin (struct list *list) {
 	ASSERT (list != NULL);
 	return list->tail.prev;
 }
