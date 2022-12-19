@@ -135,7 +135,7 @@ thread_start (void) {
 	/* Create the idle thread. */
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
-	thread_create ("idle", PRI_MIN, idle, &idle_started);
+	thread_create ("idle", PRI_DEFAULT, idle, &idle_started);
 
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
@@ -255,8 +255,17 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
+	// list_push_back (&ready_list, &t->elem);
+	
+	struct thread* curr = thread_current();
+	if (curr->priority < t->priority){
+		thread_yield();
+	}
+		//뺏고 기존껄 readylist
+	
 	intr_set_level (old_level);
 }
 
@@ -319,7 +328,8 @@ void thread_yield (void) {
 
 	old_level = intr_disable ();	// 꺼주기
 	if (curr != idle_thread)	// 현 쓰레드가 idle이 아니라면
-		list_push_back (&ready_list, &curr->elem);	// 현재 쓰레드를 ready_list tail 에 넣어주고, curr 를 list_elem 의 next로 넣어준다.
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
+		// list_push_back (&ready_list, &curr->elem);	// 현재 쓰레드를 ready_list tail 에 넣어주고, curr 를 list_elem 의 next로 넣어준다.
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -332,19 +342,38 @@ void thread_sleep(int64_t ticks)
 	old_level = intr_disable ();
 	curr -> wakeup_tick = ticks;
 
-	// do_schedule(THREAD_BLOCKED);
 	// 슬립리스트에 넣기
 	if (curr != idle_thread){
 		list_push_back(&sleep_list,&curr->elem);
 		next_tick_to_awake = next_tick_to_awake 
 		< ticks ? next_tick_to_awake : ticks;
 	}
-	// do_schedule(THREAD_BLOCKED);
-	thread_block(); // thread_block()이 맞다!!!
+	do_schedule(THREAD_BLOCKED);
+	// thread_block(); 
 	// curr ->status = THREAD_BLOCKED;
 
 	intr_set_level (old_level);
 }
+void test_max_priority(void) {
+	struct thread *curr = thread_current();
+	struct thread* t = list_entry(list_begin(&ready_list),struct thread,elem);
+
+	if (curr->priority < t->priority) {
+		thread_yield();
+	}
+
+}
+
+
+bool cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED) {
+	struct thread *t1 = list_entry(a,struct thread,elem);
+	struct thread *t2 = list_entry(b,struct thread,elem);
+
+	return t1->priority >= t2->priority;
+
+}
+
 
 /* thread.c의 next_tick_to_awake반환*/
 int64_t get_next_tick_to_awake(void)  {
@@ -367,7 +396,6 @@ void thread_awake(int64_t ticks) {
 		if (t->wakeup_tick <= ticks){
 				e = list_remove(&t->elem);
 				thread_unblock(t);
-				
 		}
 		else{
 			update_next_tick_to_awake(t->wakeup_tick);
@@ -380,6 +408,7 @@ void thread_awake(int64_t ticks) {
 
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+// 이게 언제 불려질까
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
@@ -479,6 +508,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->wakeup_tick = INT64_MAX;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

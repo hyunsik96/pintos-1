@@ -91,9 +91,10 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int64_t wakeup_tick;	/* 추가 */
+	int64_t wakeup_tick;				/* 추가 */
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -142,6 +143,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+// 비교 함수
+bool cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
+void test_max_priority(void);
 
 void do_iret (struct intr_frame *tf);
 /* thread.c의
