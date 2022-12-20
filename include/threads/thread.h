@@ -155,6 +155,8 @@ int thread_get_load_avg (void);
 // 비교 함수
 bool cmp_priority(const struct list_elem *a,
 const struct list_elem *b,void *aux UNUSED);
+bool d_cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
 void test_max_priority(void);
 
 void do_iret (struct intr_frame *tf);

@@ -375,6 +375,14 @@ const struct list_elem *b,void *aux UNUSED) {
 
 }
 
+bool d_cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED) {
+	struct thread *t1 = list_entry(a,struct thread,d_elem);
+	struct thread *t2 = list_entry(b,struct thread,d_elem);
+
+	return t1->priority > t2->priority;
+
+}
 
 /* thread.c의 next_tick_to_awake반환*/
 int64_t get_next_tick_to_awake(void)  {
@@ -413,6 +421,8 @@ void thread_awake(int64_t ticks) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	donate_priority();
+	refresh_priority();
 	test_max_priority();
 }
 
