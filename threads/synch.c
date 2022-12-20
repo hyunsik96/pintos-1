@@ -272,12 +272,15 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-
+	//donation 리스트에서 기부해준 우선순위를 제거
+	remove_with_lock(lock);
+	//우선순위 재정리
+	refresh_priority();
+	
+	//내가 가지고 있는 lock을 해지해준다.
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 	
-	remove_with_lock(lock);
-	refresh_priority();
 	// donation list에서 스레드 제거, 우선순위 계산
 	// remove_with_lock(), refresh_priority
 
