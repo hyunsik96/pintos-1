@@ -222,6 +222,11 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	struct thread* curr = thread_current();
+		if (curr->priority < t->priority){
+			thread_yield();
+		}
+
 	return tid;
 }
 
@@ -260,11 +265,7 @@ thread_unblock (struct thread *t) {
 	t->status = THREAD_READY;
 	// list_push_back (&ready_list, &t->elem);
 	
-	struct thread* curr = thread_current();
-	if (curr->priority < t->priority){
-		thread_yield();
-	}
-		//뺏고 기존껄 readylist
+	
 	
 	intr_set_level (old_level);
 }
@@ -370,7 +371,7 @@ const struct list_elem *b,void *aux UNUSED) {
 	struct thread *t1 = list_entry(a,struct thread,elem);
 	struct thread *t2 = list_entry(b,struct thread,elem);
 
-	return t1->priority >= t2->priority;
+	return t1->priority > t2->priority;
 
 }
 
@@ -412,6 +413,7 @@ void thread_awake(int64_t ticks) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	test_max_priority();
 }
 
 /* Returns the current thread's priority. */
