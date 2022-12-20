@@ -509,9 +509,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->pre_priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = INT64_MAX;
-
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 
     // Priority donation관련자료구조초기화코드삽입
 

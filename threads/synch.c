@@ -66,8 +66,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered (&sema->waiters,&thread_current ()->elem,cmp_priority,NULL);
 		
+		list_insert_ordered (&sema->waiters,&thread_current ()->elem,cmp_priority,NULL);
 		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
@@ -212,18 +212,33 @@ void lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
-
+	
+	struct thread* curr = thread_current();
+	if(lock->holder != NULL){
+		curr->wait_on_lock = lock;
+		list_insert_ordered(&lock->holder->donations, cmp_priority, &curr->d_elem, NULL);
+	}
+	
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	lock->holder = thread_current (); 
+	curr ->wait_on_lock = NULL; //curr가 제어권을 얻었으니까 wait_on_lock 제거
 
 	donate_priority();
-
 
 }
 void donate_priority(void) {
 	// priority donation 수행
-
-	
+	struct thread* curr = thread_current();
+	struct thread* p = curr->wait_on_lock->holder;
+	int cnt = 0;
+	while(p->wait_on_lock != NULL)
+	{
+		if(cnt++ >= 8){
+			break;
+		}
+		p->priority = curr->priority;
+		p = p->wait_on_lock->holder;
+	}
 }
 
 
@@ -261,11 +276,22 @@ lock_release (struct lock *lock) {
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 	
-	// donation list에서 스레드 제거, 우선순위 계싼
+	remove_with_lock(lock);
+
+	// donation list에서 스레드 제거, 우선순위 계산
 	// remove_with_lock(), refresh_priority
 
 }
 
+void remove_with_lock(struct lock *lock){
+	struct thread* curr = thread_current();
+	list_remove(&curr->d_elem);
+	
+}
+
+void refresh_priority(void){
+
+}
 /* Returns true if the current thread holds LOCK, false
    otherwise.  (Note that testing whether some other thread holds
    a lock would be racy.) */

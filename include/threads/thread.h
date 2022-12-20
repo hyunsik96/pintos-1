@@ -99,7 +99,8 @@ struct thread {
 	
 	// 해당 쓰레드가 대기하고 있는 lock 자료구조 주소 저장필드
 	struct lock* wait_on_lock;
-	
+	struct list donations;
+	struct list_elem d_elem;
 	// Priority donation 관련 자료구조 초기화 코드 삽입
 	// 위의 리스트를 위한 elem 추가
 
