@@ -208,15 +208,25 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-void
-lock_acquire (struct lock *lock) {
+void lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
+
+	donate_priority();
+
+
 }
+void donate_priority(void) {
+	// priority donation 수행
+
+	
+}
+
+
 
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
@@ -250,6 +260,10 @@ lock_release (struct lock *lock) {
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
+	
+	// donation list에서 스레드 제거, 우선순위 계싼
+	// remove_with_lock(), refresh_priority
+
 }
 
 /* Returns true if the current thread holds LOCK, false

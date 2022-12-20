@@ -32,7 +32,7 @@ void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
 
 
-
+void donate_priority(void);
 
 /* Condition variable. */
 struct condition {

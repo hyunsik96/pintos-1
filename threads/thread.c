@@ -511,6 +511,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = INT64_MAX;
+
+
+    // Priority donation관련자료구조초기화코드삽입
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

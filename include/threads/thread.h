@@ -95,7 +95,15 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	
+	int pre_priority;					// donate 받기 이전 우선순위
+	
+	// 해당 쓰레드가 대기하고 있는 lock 자료구조 주소 저장필드
+	struct lock* wait_on_lock;
+	
+	// Priority donation 관련 자료구조 초기화 코드 삽입
+	// 위의 리스트를 위한 elem 추가
 
+	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
