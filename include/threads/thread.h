@@ -91,10 +91,15 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-
-	/* Shared between thread.c and synch.c. */
+	int pre_priority;					/* donate 받기 이전, 기존 우선순위 */
+	int64_t wakeup_tick;				/* 추가 */
 	struct list_elem elem;              /* List element. */
-
+	
+	// 해당 쓰레드가 대기하고 있는 lock 자료구조 주소 저장필드
+	struct lock* wait_on_lock;
+	struct list donations;
+	struct list_elem d_elem;
+	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -132,6 +137,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_sleep(int64_t ticks);	/* 재우는 함수 추가 */
 
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -141,6 +147,20 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void do_iret (struct intr_frame *tf);
+/* 비교 함수 */
+bool cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
+bool d_cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
 
+/* 실행 중인 스레드를 레디큐 가장 앞녀석 우선순위 비교해서 더 작으면 yield 시키기 */
+void test_max_priority(void);
+
+void do_iret (struct intr_frame *tf);
+/* thread.c의 next_tick_to_awake반환*/
+int64_t get_next_tick_to_awake(void);
+ /*최소틱을가진 스레드저장*/
+void update_next_tick_to_awake(int64_t ticks);
+/* 슬립큐에서깨워야할스레드를깨움*/
+void thread_awake(int64_t ticks); 
 #endif /* threads/thread.h */

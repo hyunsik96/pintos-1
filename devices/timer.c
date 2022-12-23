@@ -37,7 +37,6 @@ timer_init (void) {
 	/* 8254 input frequency divided by TIMER_FREQ, rounded to
 	   nearest. */
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
-
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
@@ -87,14 +86,20 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
-void
-timer_sleep (int64_t ticks) {
+/* 
+ * Suspends execution for approximately TICKS timer ticks.
+ * Nsure: if문이 정녕 필요 없는지
+ */
+void timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// if (timer_elapsed (start) < ticks){
+
+		/* 스레드 계속 몰아넣지말고 재우기 */
+		thread_sleep(start + ticks);
+
+	// }
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -125,7 +130,10 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick ();
+	if (ticks >= get_next_tick_to_awake())
+		thread_awake(ticks);
+	
+	thread_tick ();	/* timer interrupt가 1틱마다 일어나기에 실행중인 스레드의 time slice도 1틱 증가 */
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

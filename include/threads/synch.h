@@ -6,7 +6,7 @@
 
 /* A counting semaphore. */
 struct semaphore {
-	unsigned value;             /* Current value. */
+	unsigned value;             /* 자원의 개수 */
 	struct list waiters;        /* List of waiting threads. */
 };
 
@@ -15,6 +15,8 @@ void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
+
+bool cmp_sem_priority (const struct list_elem *, const struct list_elem * ,void * UNUSED);
 
 /* Lock. */
 struct lock {
@@ -27,6 +29,9 @@ void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
+void donate_priority(void);
 
 /* Condition variable. */
 struct condition {
