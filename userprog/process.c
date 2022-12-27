@@ -38,8 +38,7 @@ process_init (void) {
  * before process_create_initd() returns. Returns the initd's
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
-tid_t
-process_create_initd (const char *file_name) {
+tid_t process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
 
@@ -50,7 +49,6 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
-	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
@@ -177,18 +175,70 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	// 파싱해주기
+	char *argv[30]; 
+	int argc = 0;
+	char *token, *save_ptr;
 
+	token = strtok_r(file_name, " ", &save_ptr); // " "을 기준으로 앞의 내용은 file_name에 저장하고, 
+	// " " 뒤의 내용은 save_ptr에 저장
+	while (token != NULL)
+	{
+		argv[argc++] = token; 
+		token = strtok_r(NULL, " ", &save_ptr);
+	}
+
+	success = load (file_name, &_if);
+	
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
+	if (!success){
+		palloc_free_page(file_name);
 		return -1;
+	}
+
+	// load 성공한 경우, load_userStack() 통해 user stack에 인자 저장
+	// Project 2-1. Pass args - load arguments onto the user stack
+	// 5. 인자들을 user stack에 넘기기
+	argument_stack(argv, argc, &_if.rsp);
+	
+	hex_dump(_if.rsp,_if.rsp,USER_STACK - _if.rsp,true);
+	_if.R.rdi = argc; //rdi : 목적지(destination)
+	_if.R.rsi = &_if.rsp + sizeof(void *); // rsi : 출발지(source)
+	
+
+	palloc_free_page (file_name);
+
 
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
 }
-
+void argument_stack(char **argv ,int argc ,void **rsp)
+{
+    for (int i=argc-1; i>=0; i--)
+    {
+		int arg_size = strlen(argv[i]) + 1;
+		*rsp -= arg_size;
+		memcpy(*rsp, argv[i], arg_size);
+		argv[i] = (char *)*rsp;
+    }
+    if ((int)*rsp % 8)
+    {
+        int padding = (int)*rsp % 8;
+        *rsp -= padding;
+        memset(*rsp, 0, padding);
+    }
+    *rsp -= 8;
+    memset(*rsp, 0, 8);
+	
+    for(int i=argc-1; i>=0; i--)
+    {
+        *rsp -= 8;
+        memcpy(*rsp, &argv[i], 8);
+    }
+    *rsp -= 8;
+    memset(*rsp, 0, 8);
+}
 
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
