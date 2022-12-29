@@ -49,9 +49,9 @@ sema_init (struct semaphore *sema, unsigned value) {
 	list_init (&sema->waiters);
 }
 
-/* 자원을 획득한단 뜻, 자원이 생길때 까지 기다린 뒤, 
-	 생기면 waiter리스트에 넣어주고,
-	 상태 블록바꿔주고, 레디큐 다음 스레드 실행하고, value-- */
+/* 자원을 획득한단 뜻, 자원이 없으면 웨이터행, 
+	 상태 블록바꿔주고, 레디큐 다음 스레드 실행하고,
+	 자원 있으면 value-- */
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
 
@@ -68,7 +68,7 @@ void sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 
-	/* 자원이 생길때 까지 기다린 뒤, 생기면 waiter리스트에 넣어주고, 상태 블록바꿔주고, 레디큐 다음 스레드 실행하고, value-- */
+	/* 자원이 생길때 까지 기다리며  waiter리스트에 넣어주고, 상태 블록바꿔주고, 레디큐 다음 스레드 실행하고, value-- */
 	while (sema->value == 0) {
 		list_insert_ordered (&sema->waiters,&thread_current ()->elem,cmp_priority,NULL);
 		thread_block ();

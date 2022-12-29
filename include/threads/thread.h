@@ -5,10 +5,14 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
+/* project2 */
+#define FDT_PAGES 3
+#define FDT_COUNT_LIMIT FDT_PAGES *(1<<9) // limit fdidx
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -100,6 +104,25 @@ struct thread {
 	struct list donations;
 	struct list_elem d_elem;
 	
+	/* project2 system call */
+	int exit_status;	// exit 할때 status 넣어주는 필드
+	struct file **fd_table;	// file descriptor table 의 시작 주소를 가르킴
+	int fd_idx;	//	fd table 의 open spot 의 index
+
+	struct intr_frame parent_if;	// 부모 쓰레드의 if
+	struct semaphore fork_sema;	// fork한 child의 load를 기다리는 용도
+
+	struct list child_list;	// parent가 가진 자식 쓰레드 리스트
+	struct list_elem child_elem;
+
+	struct semaphore wait_sema;
+	struct semaphore free_sema;
+
+	struct file *running;	// 이 스레드에서 실행시키고있는 파일
+
+	int stdin_count;
+	int stdout_count;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
