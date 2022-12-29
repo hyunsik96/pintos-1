@@ -2,9 +2,14 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
-
+#include <stdbool.h>
 struct inode;
-
+/* An open file. */
+struct file {
+	struct inode *inode;        /* File's inode. 파일 데이터의 메타 데이터*/
+	off_t pos;                  /* Current position. 파일 읽거나 쓸 때 처음부터 읽거나 쓸 필요 없다*/
+	bool deny_write;            /* Has file_deny_write() been called? 읽기전용 파일인지 나태냄*/
+};
 /* Opening and closing files. */
 struct file *file_open (struct inode *);
 struct file *file_reopen (struct file *);

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 #include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -28,6 +29,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define FDT_PAGES 3
+#define FDT_COUNT_LIMIT FDT_PAGES*(1<<9) //limit fdidx
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -104,7 +107,24 @@ struct thread {
 	// Priority donation 관련 자료구조 초기화 코드 삽입
 	// 위의 리스트를 위한 elem 추가
 
+	int exit_status; //exit할 때 status 넣어주는 필드
+	struct file **fd_table; //file descriptor의 시작 주소
+	int fd_idx; //fd table에 open spot의 index
+
+	struct intr_frame parent_if; //부모의 interrupt frame
+	struct semaphore fork_sema; // fork한 child의 load를 기다리는 용도
 	
+	struct list child_list; //parent가 가진 자식 스레드 리스트
+	struct list_elem child_elem; //자식 스레드 리스트에 들어갈 element
+	
+	struct semaphore wait_sema; 
+	struct semaphore free_sema; 
+
+	struct file *running; //스레드에서 돌아가고 있는 파일
+
+	int stdin_count; //표준
+	int stdout_count; //
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
