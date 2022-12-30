@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -131,7 +132,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-	if (is_kernal_vaddr(va)){
+	if (is_kernel_vaddr(va)){
 		return true;
 	}
 
@@ -182,6 +183,8 @@ __do_fork (void *aux) {
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
+	if_.R.rax = 0;
+
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -219,7 +222,7 @@ __do_fork (void *aux) {
 		{
 			struct file *new_file;
 			// 표시
-			if (file >= 2){
+			if (file > 2){
 				new_file = file_duplicate(file);
 			}
 			else{
@@ -265,7 +268,7 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
     /* argument parsing */
-    char *argv[64]; // argument 배열
+    char *argv[30]; // argument 배열
     int argc = 0;    // argument 개수
     char *token;
     char *save_ptr; // 분리된 문자열 중 남는 부분의 시작주소, 직접 처리할 일 X
@@ -280,19 +283,19 @@ process_exec (void *f_name) {
 	/* _if의 rsp에 유저스택, rip에 스택 포인터 할당하는 과정 */
 	success = load (file_name, &_if);	// 여기선 이미 filename 에 앞부분만 담겨있다.
 
+
+    // hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true);	// 잘 됐는지 check 용
+
+	/* If load failed, quit. */
+	if (!success){
+		palloc_free_page (file_name);
+		return -1;
+	}
     /* 스택에 인자 넣기 */
     void **rspp = &_if.rsp;	// 유저 스택을 가르키는 주소인 rsp의 주소가 rspp
     argument_stack(argv, argc, rspp);
     _if.R.rdi = argc;	// rdi : 목적지 ( arg 몇개 들어갔는지 )
     _if.R.rsi = (uint64_t)*rspp + sizeof(void *);	// rsi : 출발지 ( 초기화한 return address의 직전 )
-
-    // hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true);	// 잘 됐는지 check 용
-
-	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
-		return -1;
-
 	/* Start switched process. Context Switching */
 	do_iret (&_if);	// intr_frame 정보를 가지고 launch thread
 	NOT_REACHED ();
@@ -357,13 +360,11 @@ void argument_stack(char **argv, int argc, void **rspp)
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
-int
-process_wait (tid_t child_tid UNUSED) {
+int process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 
-	struct thread *cur = thread_current();
 	struct thread *child = get_child_with_pid(child_tid);
 
 	if (child == NULL){
@@ -397,9 +398,9 @@ process_exit (void) {
     // for rox- (실행중에 수정 못하도록)
     file_close(cur->running);
 
+    process_cleanup();            // pml4를 날림(이 함수를 call 한 thread의 pml4)
     sema_up(&cur->wait_sema);    // 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
     sema_down(&cur->free_sema); // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)
-    process_cleanup();            // pml4를 날림(이 함수를 call 한 thread의 pml4)
 }
 
 /* Free the current process's resources. */

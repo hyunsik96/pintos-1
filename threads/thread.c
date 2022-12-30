@@ -199,6 +199,21 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	  /* 현재 스레드의 자식 리스트에 새로 생성한 스레드 추가 */
+    struct thread *curr = thread_current();
+    list_push_back(&curr->child_list,&t->child_elem);
+
+    /* 파일 디스크립터 초기화 */
+    t->fd_table = palloc_get_multiple(PAL_ZERO,FDT_PAGES);
+    if(t->fd_table == NULL)
+        return TID_ERROR;
+    t->fd_idx = 2;
+    t->fd_table[0] = 1;
+    t->fd_table[1] = 2;
+
+    t->stdin_count = 1;
+    t->stdout_count = 1;
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -490,10 +505,17 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->pre_priority = priority;
+	
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = INT64_MAX;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+
+	list_init(&t->child_list);
+    sema_init(&t->wait_sema,0);
+    sema_init(&t->fork_sema,0);
+    sema_init(&t->free_sema,0);
+	 t->running = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

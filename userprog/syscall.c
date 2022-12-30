@@ -7,12 +7,14 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+
 #include "filesys/filesys.h"
-#include "threads/palloc.h"
-#include "userprog/process.h"
 #include "filesys/file.h"
-
-
+#include <list.h>
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "threads/synch.h"
 
 /* System call.
  *
@@ -27,47 +29,49 @@
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
-void
-syscall_init (void) {
-	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
-			((uint64_t)SEL_KCSEG) << 32);
-	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
+void syscall_init(void)
+{
+    write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 |
+                            ((uint64_t)SEL_KCSEG) << 32);
+    write_msr(MSR_LSTAR, (uint64_t)syscall_entry);
 
-	/* The interrupt service rountine should not serve any interrupts
-	 * until the syscall_entry swaps the userland stack to the kernel
-	 * mode stack. Therefore, we masked the FLAG_FL. */
-	write_msr(MSR_SYSCALL_MASK,
-			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
-    
+    /* The interrupt service rountine should not serve any interrupts
+     * until the syscall_entry swaps the userland stack to the kernel
+     * mode stack. Therefore, we masked the FLAG_FL. */
+    write_msr(MSR_SYSCALL_MASK,
+              FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
     lock_init(&filesys_lock);
 }
-void
-check_address (void *addr) {
-	struct thread *current_thread = thread_current();
-	/* 우선 유저영역인지 커널영역인지 확인한 뒤,
-		 유저영역일지라도 페이지로 할당 된 부분인지 확인 */
-	if (is_kernel_vaddr(addr) || pml4_get_page(current_thread->pml4, addr) == NULL) {
-		exit(-1);
-	}
+void check_address(void *addr)
+{
+    struct thread *current_thread = thread_current();
+    /* 우선 유저영역인지 커널영역인지 확인한 뒤,
+         유저영역일지라도 페이지로 할당 된 부분인지 확인 */
+    if (addr = NULL||is_kernel_vaddr(addr) || pml4_get_page(current_thread->pml4, addr) == NULL)
+    {
+        exit(-1);
+    }
 }
 
 /* rax에 syscall number 가 들어있으니 이를 syscall-nr.h에 선언된 enum으로 비교 & 확인
-	들어가는 인자는 단순히 들어오는 순서대로 rdi, rsi, rdx ... */
+    들어가는 인자는 단순히 들어오는 순서대로 rdi, rsi, rdx ... */
 void syscall_handler(struct intr_frame *f UNUSED)
 {
-    switch (f->R.rax) 
+    switch (f->R.rax)
     {
     case SYS_HALT:
         halt();
         break;
     case SYS_EXIT:
-        exit(f->R.rdi); 
+        exit(f->R.rdi);
         break;
     case SYS_FORK:
-		f->R.rax = fork(f->R.rdi);
-		break;
+        f->R.rax = fork(f->R.rdi, f); // 수정
+        break;
     case SYS_EXEC:
-		f->R.rax = exec(f->R.rdi);
+        if (exec(f->R.rdi) == -1) // 수정
+            exit(-1);
         break;
     case SYS_WAIT:
         f->R.rax = wait(f->R.rdi);
@@ -94,10 +98,10 @@ void syscall_handler(struct intr_frame *f UNUSED)
         seek(f->R.rdi, f->R.rsi);
         break;
     case SYS_TELL:
-       f->R.rax = tell(f->R.rdi);
+        f->R.rax = tell(f->R.rdi);
         break;
     case SYS_CLOSE:
-       close(f->R.rdi);
+        close(f->R.rdi);
         break;
     default:
         exit(-1);
@@ -105,36 +109,38 @@ void syscall_handler(struct intr_frame *f UNUSED)
     }
 }
 
-void halt(void){
-	power_off();
+void halt(void)
+{
+    power_off();
 }
 
 void exit(int status)
 {
-	struct thread *cur = thread_current();
+    struct thread *cur = thread_current();
     cur->exit_status = status;
-	
-	printf("%s: exit(%d)\n", cur->name, status);
 
-	thread_exit();
+    printf("%s: exit(%d)\n", cur->name, status);
+
+    thread_exit();
 }
 
 bool create(const char *file, unsigned initial_size)
 {
-	check_address(file);
-	return filesys_create(file,initial_size);
+    check_address(file);
+    return filesys_create(file, initial_size);
 }
 
 bool remove(const char *file)
 {
-	check_address(file);
-	return filesys_remove(file);
+    check_address(file);
+    return filesys_remove(file);
 }
 
 /* 자식 프로세스 생성하고 프로그램 실행 */
-int exec (char *file_name){
-    check_address(file_name);   // 파일이 유효한 주소인지 확인
-    int file_size = strlen(file_name) + 1;  // \0 을 위해 1더함
+int exec(char *file_name)
+{
+    check_address(file_name);              // 파일이 유효한 주소인지 확인
+    int file_size = strlen(file_name) + 1; // \0 을 위해 1더함
 
     /* race condition 방지하기 위해 아에 새로 할당받아 파일이름 복사해준다.
         여기서 할당한 페이지는 load에서 할당 해제 */
@@ -145,7 +151,8 @@ int exec (char *file_name){
     }
     strlcpy(fn_copy, file_name, file_size); // file 이름만 복사
 
-    if (process_exec(fn_copy) == -1){
+    if (process_exec(fn_copy) == -1)
+    {
         return -1;
     }
 
@@ -154,37 +161,44 @@ int exec (char *file_name){
 }
 
 /* 자식 프로세스 종료 대기 */
-int wait (tid_t tid){
+int wait(tid_t tid)
+{
     return process_wait(tid);
 }
 
-
-tid_t fork (const char *thread_name, struct intr_frame *f){
+tid_t fork(const char *thread_name, struct intr_frame *f)
+{
     return process_fork(thread_name, f);
 }
 
 /* 파일 열기 */
-int open (const char *file){
+int open(const char *file)
+{
     check_address(file);
+    lock_acquire(&filesys_lock); //수정
     struct file *open_file = filesys_open(file);
-    
+
     if (open_file == NULL)
     {
+        printf("@@@@@");
         return -1;
     }
 
     int fd = add_file_to_fdt(open_file);
 
-    if (fd == -1){
+    if (fd == -1)
+    {
         file_close(open_file);
     }
+    lock_release(&filesys_lock);
     return fd;
 }
 
 /* 파일 크기 알려주기 */
 /* 이 시스템콜이 어디서 사용되는지 csapp에서 찾아보기
     read 에서 메모리에 파일 올려 읽을 때 사용되기도 함 */
-int filesize (int fd){
+int filesize(int fd)
+{
     struct file *open_file = find_file_by_fd(fd);
     if (open_file == NULL)
     {
@@ -194,11 +208,12 @@ int filesize (int fd){
 }
 
 /* 열린 파일 데이터 읽기 */
-int read (int fd, void *buffer, unsigned size){
+int read(int fd, void *buffer, unsigned size)
+{
     check_address(buffer);
     off_t read_byte;
     uint8_t *read_buffer = buffer;
-
+    struct thread *cur = thread_current();
     /* stdin 으로 들어오고있는 파일디스크립터 취급해서 읽고, stdout은 버리고 파일로 들어오는 건 직접 꺼내읽기 */
     if (fd == 0)
     {
@@ -219,7 +234,7 @@ int read (int fd, void *buffer, unsigned size){
     }
     else
     {
-        struct file *read_file = find_file_by_fd(fd);   // 
+        struct file *read_file = find_file_by_fd(fd); //
         if (read_file == NULL)
         {
             return -1;
@@ -232,31 +247,42 @@ int read (int fd, void *buffer, unsigned size){
 }
 
 /* 열린 파일의 데이터를 기록 */
-int write (int fd, const void *buffer, unsigned size){
-	check_address(buffer);
+int write(int fd, const void *buffer, unsigned size)
+{
+    check_address(buffer);
 
-	int write_result;   // return 용 wirte 한 size
-	lock_acquire(&filesys_lock);    // 
-	if (fd == 1) {
-		putbuf(buffer, size);		// 문자열을 화면에 출력하는 함수
-		write_result = size;
-	}
-	else {
-		if (find_file_by_fd(fd) != NULL) {
-			write_result = file_write(find_file_by_fd(fd), buffer, size);
-		}
-		else {
-			write_result = -1;
-		}
-	}
-	lock_release(&filesys_lock);
+    int write_result;            // return 용 wirte 한 size
+    lock_acquire(&filesys_lock); //
+    if (fd == 0)                 // 수정
+    {
+        write_result = -1;
+    }
+    else if (fd == 1)
+    {
+        putbuf(buffer, size); // 문자열을 화면에 출력하는 함수
+        write_result = size;
+    }
+    else
+    {
+        if (find_file_by_fd(fd) != NULL)
+        {
+            write_result = file_write(find_file_by_fd(fd), buffer, size);
+        }
+        else
+        {
+            write_result = -1;
+        }
+    }
+    lock_release(&filesys_lock);
 
-	return write_result;
+    return write_result;
 }
 
 /* 열린 파일의 위치(offset)를 이동 */
-void seek (int fd, unsigned position){
-    if (fd<2){
+void seek(int fd, unsigned position)
+{
+    if (fd < 2)
+    {
         return;
     }
     struct file *seek_file = find_file_by_fd(fd);
@@ -265,22 +291,27 @@ void seek (int fd, unsigned position){
 }
 
 /* 열린 파일의 위치(offset)를 알려주기 */
-unsigned tell (int fd){
-    if (fd < 2){
+unsigned tell(int fd)
+{
+    if (fd < 2)
+    {
         return;
     }
     struct file *file = find_file_by_fd(fd);
     check_address(file);
-    if (file == NULL){
+    if (file == NULL)
+    {
         return;
     }
     return file_tell(fd);
 }
 
 /* 열린 파일을 닫기 */
-void close (int fd){
+void close(int fd)
+{
     struct file *fileobj = find_file_by_fd(fd);
-    if (fileobj == NULL){
+    if (fileobj == NULL)
+    {
         return;
     }
     remove_file_from_fdt(fd);
@@ -323,10 +354,10 @@ void remove_file_from_fdt(int fd)
 {
     struct thread *cur = thread_current();
 
-    if (fd <0 || fd >= FDT_COUNT_LIMIT){
+    if (fd < 0 || fd >= FDT_COUNT_LIMIT)
+    {
         return;
     }
 
     cur->fd_table[fd] = NULL;
 }
-
