@@ -533,6 +533,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wakeup_tick = INT64_MAX;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+
+	list_init(&t->child_list);
+    sema_init(&t->wait_sema,0);
+    sema_init(&t->fork_sema,0);
+    sema_init(&t->free_sema,0);
+	t->running = NULL;
     // Priority donation관련자료구조초기화코드삽입
 
 }

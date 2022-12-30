@@ -355,7 +355,20 @@ struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
 };
+bool cmp_sem_priority (const struct list_elem *a,
+const struct list_elem *b,void *aux) {
 
+	struct semaphore_elem *sema1 = list_entry(a,struct semaphore_elem, elem);
+	struct semaphore_elem *sema2 = list_entry(b,struct semaphore_elem, elem);
+	
+	struct list *waiter_sema1 = &(sema1->semaphore.waiters);
+	struct list *waiter_sema2 = &(sema2->semaphore.waiters);
+
+	struct thread *t1 = list_entry(list_begin(waiter_sema1),struct thread,elem);
+	struct thread *t2 = list_entry(list_begin(waiter_sema2),struct thread,elem);
+
+	return t1->priority > t2->priority;
+}
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -439,17 +452,3 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 		cond_signal (cond, lock);
 }
 
-bool cmp_sem_priority (const struct list_elem *a,
-const struct list_elem *b,void *aux) {
-
-	struct semaphore_elem *sema1 = list_entry(a,struct semaphore_elem, elem);
-	struct semaphore_elem *sema2 = list_entry(b,struct semaphore_elem, elem);
-	
-	struct list *waiter_sema1 = &(sema1->semaphore.waiters);
-	struct list *waiter_sema2 = &(sema2->semaphore.waiters);
-
-	struct thread *t1 = list_entry(list_begin(waiter_sema1),struct thread,elem);
-	struct thread *t2 = list_entry(list_begin(waiter_sema2),struct thread,elem);
-
-	return t1->priority > t2->priority;
-}

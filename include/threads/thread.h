@@ -116,11 +116,13 @@ struct thread {
 	
 	struct list child_list; //parent가 가진 자식 스레드 리스트
 	struct list_elem child_elem; //자식 스레드 리스트에 들어갈 element
-	
+
 	struct semaphore wait_sema; 
 	struct semaphore free_sema; 
 
 	struct file *running; //스레드에서 돌아가고 있는 파일
+
+
 
 	int stdin_count; //표준
 	int stdout_count; //

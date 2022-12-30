@@ -195,6 +195,7 @@ static void __do_fork(void *aux)
 #endif
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -227,23 +228,20 @@ static void __do_fork(void *aux)
 		if (file == NULL)
 			continue;
 		// if 'file' is already duplicated in child don't duplicate again but share it
-		bool found = false;
-		if (!found)
-		{
-			struct file *new_file;
-			if (file > 2)
-				new_file = file_duplicate(file);
-			else
-				new_file = file;
-			current->fd_table[i] = new_file;
-		}
+
+		struct file *new_file;
+		if (file > 2)
+			new_file = file_duplicate(file);
+		else
+			new_file = file;
+		current->fd_table[i] = new_file;
 	}
 	current->fd_idx = parent->fd_idx;
 
 #ifdef DEBUG
 	printf("[do_fork] %s Ready to switch!\n", current->name);
 #endif
-
+	current->fd_idx = parent->fd_idx;
 	sema_up(&current->fork_sema);
 
 	/* Finally, switch to the newly created process. */
@@ -302,13 +300,14 @@ int process_exec(void *f_name)
 	// load 성공한 경우, load_userStack() 통해 user stack에 인자 저장
 	// Project 2-1. Pass args - load arguments onto the user stack
 	// 5. 인자들을 user stack에 넘기기
-	argument_stack(argv, argc, &_if.rsp);
+	void **rspp = &_if.rsp;
+	argument_stack(argv, argc, rspp);
 
 	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	_if.R.rdi = argc;					   // rdi : 목적지(destination)
-	_if.R.rsi = &_if.rsp + sizeof(void *); // rsi : 출발지(source)
+	_if.R.rsi = (uint64_t)*rspp + sizeof(void *); // rsi : 출발지(source)
 
-	palloc_free_page(file_name);
+	// palloc_free_page(file_name);
 
 	/* Start switched process. */
 	do_iret(&_if);
