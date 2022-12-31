@@ -147,6 +147,7 @@ static struct file *find_file_by_fd(int fd)
     return cur->fd_table[fd];
 }
 
+
 int add_file_to_fdt(struct file *file)
 {
     struct thread *cur = thread_current();
@@ -310,6 +311,7 @@ int read(int fd, void *buffer, unsigned size)
     uint8_t *read_buffer = buffer;
     struct thread *cur = thread_current();
     /* stdin 으로 들어오고있는 파일디스크립터 취급해서 읽고, stdout은 버리고 파일로 들어오는 건 직접 꺼내읽기 */
+
     if (fd == 0)
     {
         char key;
@@ -332,7 +334,6 @@ int read(int fd, void *buffer, unsigned size)
         struct file *read_file = find_file_by_fd(fd); //
         if (read_file == NULL)
         {
-            printf("\n@@@@@@@@@@@@@@@@@@@\n");
             return -1;
         }
         lock_acquire(&filesys_lock);

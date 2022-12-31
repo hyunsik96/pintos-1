@@ -225,29 +225,37 @@ __do_fork(void *aux)
 		goto error;
 	}
 
-	for (int i = 0; i < FDT_COUNT_LIMIT; i++)
-	{
-		struct file *file = parent->fd_table[i];
-		if (file = NULL)
-			continue;
+	// for (int i = 0; i < FDT_COUNT_LIMIT; i++)
+	// {
+	// 	struct file *file = parent->fd_table[i];
+	// 	if (file = NULL)
+	// 		continue;
 
-		// 표시
-		bool found = false;
-		if (!found)
-		{
-			struct file *new_file;
-			// 표시
-			if (file > 2)
-			{
-				new_file = file_duplicate(file);
-			}
-			else
-			{
-				new_file = file;
-			}
-			current->fd_table[i] = new_file;
+	// 	struct file *new_file;
+	// 	// 표시
+	// 	printf("\n@@@@@@@@@@@@@@@@@@@@@@@@ file : %d\n",file);
+	// 	if (file > 2)
+	// 	{
+	// 		new_file = file_duplicate(file);
+	// 	}
+	// 	else
+	// 	{
+	// 		new_file = file;
+	// 	}
+	// 	current->fd_table[i] = new_file;
+		
+	// }
+	int cnt = 2;
+	struct file **table = parent->fd_table;
+	while (cnt < FDT_COUNT_LIMIT) {
+		if (table[cnt]) {
+			current->fd_table[cnt] = file_duplicate(table[cnt]);
+		} else {
+			current->fd_table[cnt] = NULL;
 		}
+		cnt++;
 	}
+	
 	current->fd_idx = parent->fd_idx;
 
 	sema_up(&current->fork_sema);
@@ -385,7 +393,6 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       implementing the process_wait. */
 
 	struct thread *child = get_child_with_pid(child_tid);
-
 	if (child == NULL)
 	{
 		return -1;
@@ -417,6 +424,7 @@ void process_exit(void)
 	palloc_free_multiple(cur->fd_table, FDT_PAGES);
 	// for rox- (실행중에 수정 못하도록)
 	file_close(cur->running);
+	
 
 	process_cleanup();			// pml4를 날림(이 함수를 call 한 thread의 pml4)
 	sema_up(&cur->wait_sema);	// 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
@@ -635,7 +643,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	//file_close(file);
+	// file_close(file);
 	return success;
 }
 
