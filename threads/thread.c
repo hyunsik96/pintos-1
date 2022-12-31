@@ -313,6 +313,7 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
+	list_remove(&thread_current()->elem);
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
@@ -515,7 +516,7 @@ init_thread (struct thread *t, const char *name, int priority) {
     sema_init(&t->wait_sema,0);
     sema_init(&t->fork_sema,0);
     sema_init(&t->free_sema,0);
-	 t->running = NULL;
+	t->running = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
