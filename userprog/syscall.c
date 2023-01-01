@@ -7,11 +7,40 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-#include "filesys/filesys.h"
-#include "threads/palloc.h"
-#include "userprog/process.h"
-#include "filesys/file.h"
 
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include <list.h>
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "threads/synch.h"
+
+void syscall_entry (void);
+void syscall_handler (struct intr_frame *);
+
+void check_address(void *addr);
+
+void halt(void);
+void exit(int status);
+bool create(const char *file, unsigned initial_size);
+bool remove(const char *file);
+
+int open (const char *file);
+int filesize (int fd);
+int read (int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
+void seek (int fd, unsigned position);
+unsigned tell (int fd);
+void close (int fd);
+
+int exec (char *file_name);
+int wait (tid_t pid);
+tid_t fork (const char *thread_name, struct intr_frame *f);
+
+static struct file *find_file_by_fd(int fd);
+int add_file_to_fdt(struct file *file);
+void remove_file_from_fdt(int fd);
 
 
 /* System call.
@@ -46,7 +75,7 @@ check_address (void *addr) {
 	struct thread *current_thread = thread_current();
 	/* 우선 유저영역인지 커널영역인지 확인한 뒤,
 		 유저영역일지라도 페이지로 할당 된 부분인지 확인 */
-	if (is_kernel_vaddr(addr) || pml4_get_page(current_thread->pml4, addr) == NULL) {
+	if (addr == NULL || is_kernel_vaddr(addr) || pml4_get_page(current_thread->pml4, addr) == NULL) {
 		exit(-1);
 	}
 }
@@ -64,10 +93,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
         exit(f->R.rdi); 
         break;
     case SYS_FORK:
-		f->R.rax = fork(f->R.rdi);
+		f->R.rax = fork(f->R.rdi, f);
 		break;
     case SYS_EXEC:
-		f->R.rax = exec(f->R.rdi);
+		if (exec(f->R.rdi) == -1)
+			exit(-1);
         break;
     case SYS_WAIT:
         f->R.rax = wait(f->R.rdi);
@@ -166,6 +196,7 @@ tid_t fork (const char *thread_name, struct intr_frame *f){
 /* 파일 열기 */
 int open (const char *file){
     check_address(file);
+    lock_acquire(&filesys_lock);
     struct file *open_file = filesys_open(file);
     
     if (open_file == NULL)
@@ -178,6 +209,7 @@ int open (const char *file){
     if (fd == -1){
         file_close(open_file);
     }
+    lock_release(&filesys_lock);
     return fd;
 }
 
@@ -256,7 +288,7 @@ int write (int fd, const void *buffer, unsigned size){
 
 /* 열린 파일의 위치(offset)를 이동 */
 void seek (int fd, unsigned position){
-    if (fd<2){
+    if (fd<=2){
         return;
     }
     struct file *seek_file = find_file_by_fd(fd);
@@ -266,7 +298,7 @@ void seek (int fd, unsigned position){
 
 /* 열린 파일의 위치(offset)를 알려주기 */
 unsigned tell (int fd){
-    if (fd < 2){
+    if (fd <= 2){
         return;
     }
     struct file *file = find_file_by_fd(fd);
@@ -329,4 +361,3 @@ void remove_file_from_fdt(int fd)
 
     cur->fd_table[fd] = NULL;
 }
-

@@ -131,7 +131,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-	if (is_kernal_vaddr(va)){
+	if (is_kernel_vaddr(va)){
 		return true;
 	}
 
@@ -181,6 +181,8 @@ __do_fork (void *aux) {
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	/* if_의 리턴값을 0으로 설정? 표시 */
+	if_.R.rax = 0 ;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -213,20 +215,15 @@ __do_fork (void *aux) {
 		if (file = NULL)
 			continue;
 		
-		// 표시
-		bool found = false;
-		if (!found)
-		{
 			struct file *new_file;
 			// 표시
-			if (file >= 2){
+			if (file > 2){
 				new_file = file_duplicate(file);
 			}
 			else{
 				new_file = file;
 			}
 			current->fd_table[i] = new_file;
-		}
 	}
 	current->fd_idx = parent->fd_idx;
 
@@ -289,9 +286,12 @@ process_exec (void *f_name) {
     // hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true);	// 잘 됐는지 check 용
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
+	if (!success){
+		palloc_free_page (file_name);
 		return -1;
+
+	}
+	palloc_free_page (file_name);
 
 	/* Start switched process. Context Switching */
 	do_iret (&_if);	// intr_frame 정보를 가지고 launch thread
@@ -524,6 +524,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
+
+	t->running = file;
+
+	/* 현재 오픈한 파일에 다른내용 쓰지 못하게 함 */
+	file_deny_write(file);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
