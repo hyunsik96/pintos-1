@@ -60,15 +60,19 @@ process_init(void)
  * Notice that THIS SHOULD BE CALLED ONCE. */
 tid_t process_create_initd(const char *file_name)
 {
+	//커맨드 라인에서 받은 arguments를 통해 실행하고자 하는 파일에 대한 프로세스를 만드는 과정
+	//예를 들어 pintos -- -q run alarm-clock 라는 commad가 입력되었을 때
+	//arg[0] 에는 run이, arg[1]에는 실행하고자 하는 file name과 그에 붙는 arguments이 있는 string이 들어있음
+	//process_create_initd에서 인자로 arg[1]을 받고 이것을 parsing하여 user stack에 쌓아야한다.
 	char *fn_copy;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page(0);
+	fn_copy = palloc_get_page(0); //페이지 할당받고
 	if (fn_copy == NULL)
 		return TID_ERROR;
-	strlcpy(fn_copy, file_name, PGSIZE);
+	strlcpy(fn_copy, file_name, PGSIZE); //해당 페이지에 file_name을 copy로 저장함
 
 	// project 2 : system call
 	// file_name을 분리해서 넣어줘야함
@@ -225,36 +229,35 @@ __do_fork(void *aux)
 		goto error;
 	}
 
-	// for (int i = 0; i < FDT_COUNT_LIMIT; i++)
-	// {
-	// 	struct file *file = parent->fd_table[i];
-	// 	if (file = NULL)
-	// 		continue;
+	for (int i = 0; i < FDT_COUNT_LIMIT; i++)
+	{
+		struct file *file = parent->fd_table[i];
+		// if (file = NULL)
+		// 	continue;
 
-	// 	struct file *new_file;
-	// 	// 표시
-	// 	printf("\n@@@@@@@@@@@@@@@@@@@@@@@@ file : %d\n",file);
-	// 	if (file > 2)
-	// 	{
-	// 		new_file = file_duplicate(file);
-	// 	}
-	// 	else
-	// 	{
-	// 		new_file = file;
-	// 	}
-	// 	current->fd_table[i] = new_file;
-		
-	// }
-	int cnt = 2;
-	struct file **table = parent->fd_table;
-	while (cnt < FDT_COUNT_LIMIT) {
-		if (table[cnt]) {
-			current->fd_table[cnt] = file_duplicate(table[cnt]);
-		} else {
-			current->fd_table[cnt] = NULL;
+		struct file *new_file;
+		// 표시
+		if (file > 2)
+		{
+			new_file = file_duplicate(file);
 		}
-		cnt++;
+		else
+		{
+			new_file = file;
+		}
+		current->fd_table[i] = new_file;
+		
 	}
+	// int cnt = 2;
+	// struct file **table = parent->fd_table;
+	// while (cnt < FDT_COUNT_LIMIT) {
+	// 	if (table[cnt]) {
+	// 		current->fd_table[cnt] = file_duplicate(table[cnt]);
+	// 	} else {
+	// 		current->fd_table[cnt] = NULL;
+	// 	}
+	// 	cnt++;
+	// }
 	
 	current->fd_idx = parent->fd_idx;
 
@@ -276,7 +279,7 @@ error:
  * Returns -1 on fail. */
 int process_exec(void *f_name)
 {
-	char *file_name = f_name;
+	char *file_name = f_name; //void로 넘겨받은 f_name을 문자열로 인식하기 위해서 자료형을 char *로 변환해줌
 	bool success;
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -286,28 +289,33 @@ int process_exec(void *f_name)
 		interrupt나 systemcall 호출시 사용
 	*/
 	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
+	_if.ds = _if.es = _if.ss = SEL_UDSEG; //stack - user data
+	_if.cs = SEL_UCSEG; // stack - user code
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
-	process_cleanup();
+	process_cleanup(); //새로운 실행 파일을 현재 쓰레드에 담기 전에 현재 프로세스에 담긴 컨텍스트를 지움
 
 	/* argument parsing */
 	char *argv[128]; // argument 배열
 	int argc = 0;	// argument 개수
 	char *token;
 	char *save_ptr; // 분리된 문자열 중 남는 부분의 시작주소, 직접 처리할 일 X
-	token = strtok_r(file_name, " ", &save_ptr);
+	token = strtok_r(file_name, " ", &save_ptr); 
+	//strtok_r : 첫 번째 매개 변수 문자열을 두 번째 매개변수 구분자를 기준으로 문자열을 분할하여 각 문자열의 포인터를 반환함
 	while (token != NULL)
 	{
 		argv[argc] = token;
-		token = strtok_r(NULL, " ", &save_ptr);
+		token = strtok_r(NULL, " ", &save_ptr); 
+		//strtok_r의 첫번째 매개변수 문자열이 NULL이면 save_ptr에서 이전에 호출한 위치 다음부터 분리작업을 진행함
+		//여백 " "을 기준으로 문자열을 분할하는데 각 인자에 sentinel '\0'을 추가하여 저장함
+		//ex) cmd_line이 rm -rf인 경우 argv에 [rm\0,-rf\0, \0]의 형태로 저장됨
 		argc++;
 	}
 	/* And then load the binary */
 	/* _if의 rsp에 유저스택, rip에 스택 포인터 할당하는 과정 */
 	success = load(file_name, &_if); // 여기선 이미 filename 에 앞부분만 담겨있다.
+
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)*rspp, true);	// 잘 됐는지 check 용
 
@@ -323,7 +331,7 @@ int process_exec(void *f_name)
 	_if.R.rdi = argc;							  // rdi : 목적지 ( arg 몇개 들어갔는지 )
 	_if.R.rsi = (uint64_t)*rspp + sizeof(void *); // rsi : 출발지 ( 초기화한 return address의 직전 )
 	/* Start switched process. Context Switching */
-	do_iret(&_if); // intr_frame 정보를 가지고 launch thread
+	do_iret(&_if); // intr_frame 정보를 가지고 새롭게 생성된 프로세스로 context switching
 	NOT_REACHED();
 }
 
@@ -426,9 +434,9 @@ void process_exit(void)
 	file_close(cur->running);
 	
 
-	process_cleanup();			// pml4를 날림(이 함수를 call 한 thread의 pml4)
 	sema_up(&cur->wait_sema);	// 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
 	sema_down(&cur->free_sema); // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)
+	process_cleanup();			// pml4를 날림(이 함수를 call 한 thread의 pml4)
 }
 
 /* Free the current process's resources. */
@@ -550,7 +558,7 @@ load(const char *file_name, struct intr_frame *if_)
 	t->pml4 = pml4_create();
 	if (t->pml4 == NULL)
 		goto done;
-	process_activate(thread_current());
+	process_activate(thread_current()); //페이지 테이블 활성화
 
 	/* Open executable file. */
 	file = filesys_open(file_name);

@@ -120,8 +120,8 @@ struct thread {
 
 	struct file *running;	// 이 스레드에서 실행시키고있는 파일
 
-	int stdin_count;
-	int stdout_count;
+	// int stdin_count;
+	// int stdout_count;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

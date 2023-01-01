@@ -275,17 +275,17 @@ int write(int fd, const void *buffer, unsigned size)
     }
     else if (fd == 1)
     {
-        if(curr->stdout_count == 0) //수정 rox-child
-		{
-			//Not reachable
-			NOT_REACHED();
-			remove_file_from_fdt(fd);
-			write_result = -1;
-		}
-        else{
+        // if(curr->stdout_count == 0)
+		// {
+		// 	//Not reachable
+		// 	NOT_REACHED();
+		// 	remove_file_from_fdt(fd);
+		// 	write_result = -1;
+		// }
+        // else{
         putbuf(buffer, size); // 문자열을 화면에 출력하는 함수
         write_result = size;
-        }
+        //}
     }
     else
     {

@@ -211,8 +211,8 @@ thread_create (const char *name, int priority,
     t->fd_table[0] = 1;
     t->fd_table[1] = 2;
 
-    t->stdin_count = 1;
-    t->stdout_count = 1;
+    // t->stdin_count = 1;
+    // t->stdout_count = 1;
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
