@@ -31,7 +31,6 @@ static struct list ready_list;
 /* sleep list */
 static struct list sleep_list;
 
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -49,9 +48,8 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-// global tick
+/* Global tick */
 static int64_t next_tick_to_awake = INT64_MAX;
-
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -115,10 +113,10 @@ thread_init (void) {
 
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
-	list_init (&sleep_list);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-	
+	/* 추가한 sleep_list 최초에 개시되게하기 */
+	list_init (&sleep_list);
 	
 
 	/* Set up a thread structure for the running thread. */
@@ -135,15 +133,13 @@ thread_start (void) {
 	/* Create the idle thread. */
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
-	thread_create ("idle", PRI_MIN, idle, &idle_started);
-
+	thread_create ("idle", PRI_MIN, idle, &idle_started);	// Nsure: PRI_DEFAULT 로 했던 이유가 있을까?
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
 
 	/* Wait for the idle thread to initialize idle_thread. */
 	sema_down (&idle_started);
 }
-
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -161,13 +157,8 @@ void thread_tick (void) {
 		kernel_ticks++;
 
 	/* Enforce preemption. */
-	if (++thread_ticks >= TIME_SLICE){
-
-		//awake
+	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
-
-	}
-
 }
 
 /* Prints thread statistics. */
@@ -208,6 +199,21 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	  /* 현재 스레드의 자식 리스트에 새로 생성한 스레드 추가 */
+    struct thread *curr = thread_current();
+    list_push_back(&curr->child_list,&t->child_elem);
+
+    /* 파일 디스크립터 초기화 */
+    t->fd_table = palloc_get_multiple(PAL_ZERO,FDT_PAGES);
+    if(t->fd_table == NULL)
+        return TID_ERROR;
+    t->fd_idx = 2;
+    t->fd_table[0] = 1;
+    t->fd_table[1] = 2;
+
+    // t->stdin_count = 1;
+    // t->stdout_count = 1;
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -222,10 +228,13 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	/* 만들고 레디큐에 넣자마자 우선순위가 현재것보다 높으면 yield 되게끔 */
+	test_max_priority();
 	return tid;
 }
 
-/* Puts the current thread to sleep.  It will not be scheduled
+/* 상태 값 블록으로 바꿔준 뒤, 레디큐 다음 스레드 실행시키기
+	Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
    This function must be called with interrupts turned off.  It
@@ -239,7 +248,8 @@ thread_block (void) {
 	schedule ();
 }
 
-/* Transitions a blocked thread T to the ready-to-run state.
+/* 레디 리스트에 넣어주고 레디상태로 설정
+	Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
 
@@ -247,15 +257,15 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-void
-thread_unblock (struct thread *t) {
+void thread_unblock (struct thread *t) {
 	enum intr_level old_level;
 
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	/* unblock시 우선순위 고려해서 리스트에 다시 넣어주기 */
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -279,7 +289,6 @@ thread_current (void) {
 	   of stack, so a few big automatic arrays or moderate
 	   recursion can cause stack overflow. */
 	ASSERT (is_thread (t));
-	
 	ASSERT (t->status == THREAD_RUNNING);
 
 	return t;
@@ -304,22 +313,22 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
+	list_remove(&thread_current()->elem);
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
-/* Yields the CPU.  The current thread is not put to sleep and
-   may be scheduled again immediately at the scheduler's whim. */
+
+/* 실행중인 스레드 레디큐로, 레디큐의 다음스레드 실행시키기 */
 void thread_yield (void) {
-	struct thread *curr = thread_current ();	// tid, 디버깅 위한 name, priority, 상태 담긴 현재 스레드의 상태를 가져옴
-	enum intr_level old_level;	// 동기화를 위해 인터럽트를 끌지 말지 설정
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
 
-// 스레드가 본인이 혹은 타이머가 인터럽트를 이르켜서 os에게 cpu 제어권이 돌아와 스레드의 context를 저장하고 제어권을 뺏을 상태로 ready 혹은 blocked 큐로 이동
+	ASSERT (!intr_context ());
+	old_level = intr_disable ();	// 아래 한 블록의 작업 중 인터럽트 꺼주기
 
-	ASSERT (!intr_context ());	// 외부에서 인터럽트가 들어온게 아니라면 통과
-
-	old_level = intr_disable ();	// 꺼주기
 	if (curr != idle_thread)	// 현 쓰레드가 idle이 아니라면
-		list_push_back (&ready_list, &curr->elem);	// 현재 쓰레드를 ready_list tail 에 넣어주고, curr 를 list_elem 의 next로 넣어준다.
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL); // 실행중이던 스레드는 우선순위대로 레디큐에 넣어주기
+
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -330,20 +339,42 @@ void thread_sleep(int64_t ticks)
 	struct thread *curr = thread_current ();
 	
 	old_level = intr_disable ();
-	curr -> wakeup_tick = ticks;
 
-	// do_schedule(THREAD_BLOCKED);
-	// 슬립리스트에 넣기
+	curr -> wakeup_tick = ticks;	/* 이때까지 재워라 */
 	if (curr != idle_thread){
 		list_push_back(&sleep_list,&curr->elem);
-		next_tick_to_awake = next_tick_to_awake 
-		< ticks ? next_tick_to_awake : ticks;
+		update_next_tick_to_awake(ticks);
+		thread_block(); 
 	}
-	// do_schedule(THREAD_BLOCKED);
-	thread_block(); // thread_block()이 맞다!!!
-	// curr ->status = THREAD_BLOCKED;
 
 	intr_set_level (old_level);
+}
+
+/* 레디큐 처음 스레드를 현재 스레드 비교해서 더 크면 yield 시키기 */
+void test_max_priority(void) {
+	if (!list_empty(&ready_list)){
+		struct thread *curr = thread_current();
+		struct thread *t = list_entry(list_begin(&ready_list),struct thread,elem);
+		if (curr->priority < t->priority) {
+			thread_yield();
+		}
+	}
+}
+
+bool cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED) {
+	struct thread *t1 = list_entry(a,struct thread,elem);
+	struct thread *t2 = list_entry(b,struct thread,elem);
+
+	return t1->priority > t2->priority;
+}
+
+bool d_cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED) {
+	struct thread *t1 = list_entry(a,struct thread,d_elem);
+	struct thread *t2 = list_entry(b,struct thread,d_elem);
+
+	return t1->priority > t2->priority;
 }
 
 /* thread.c의 next_tick_to_awake반환*/
@@ -351,38 +382,34 @@ int64_t get_next_tick_to_awake(void)  {
 	return next_tick_to_awake;
 }
 
+/* global tick update */
 void update_next_tick_to_awake(int64_t ticks) {
-	
-	return	next_tick_to_awake = next_tick_to_awake < ticks
-	? next_tick_to_awake: ticks;
-
+	return	next_tick_to_awake = next_tick_to_awake < ticks ? next_tick_to_awake: ticks;
 }
+
+/* sleep que에서 ticks 이하의 스레드 깨워준다 */
 void thread_awake(int64_t ticks) {
-	// tick 보다 작거나 같은 쓰레드 깨워준다 
-	// 작은값 다시 갱신
-	struct list_elem *e;
-	for (e = list_begin(&sleep_list) ; e != list_end(&sleep_list);)
+
+	struct list_elem *e = list_begin(&sleep_list);
+	struct thread *t;
+	while (e != list_end(&sleep_list))
 	{
-		struct thread *t = list_entry(e, struct thread, elem);
+		t = list_entry(e, struct thread, elem);
 		if (t->wakeup_tick <= ticks){
-				e = list_remove(&t->elem);
-				thread_unblock(t);
-				
+				e = list_remove(&t->elem);	// 제거하면 현재 자리에 다음 녀석 밀려오니 증감식 적용 x
+				thread_unblock(t);	// 깨워주는 녀석은 시스템이 1초에 한번씩 인터럽트 받아 하는 것일테니 test_max_priority로 밀어내려하면 안된다.
 		}
 		else{
-			update_next_tick_to_awake(t->wakeup_tick);
-			e=list_next(e);
+			e = list_next(e);
 		}
 	}
-	
 }
 
-
-
 /* Sets the current thread's priority to NEW_PRIORITY. */
-void
-thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+void thread_set_priority (int new_priority) {
+	thread_current ()->pre_priority = new_priority;
+	refresh_priority();
+	test_max_priority();
 }
 
 /* Returns the current thread's priority. */
@@ -478,7 +505,18 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->pre_priority = priority;
+	
 	t->magic = THREAD_MAGIC;
+	t->wakeup_tick = INT64_MAX;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
+
+	list_init(&t->child_list);
+    sema_init(&t->wait_sema,0);
+    sema_init(&t->fork_sema,0);
+    sema_init(&t->free_sema,0);
+	t->running = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -599,17 +637,19 @@ static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
-	while (!list_empty (&destruction_req)) {	// 비어있지 않다면 ()
+
+	/* 스레드 제거리스트가 빌때까지 할당 해제처리 해준다 */
+	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
 		palloc_free_page(victim);
 	}
-	thread_current ()->status = status;	//  상태로 변경
-	schedule ();	// 스케쥴
+	thread_current ()->status = status;
+	schedule ();
 }
 
-static void
-schedule (void) {
+/* ready_list의 다음 스레드 실행시켜주는 함수 */
+static void schedule (void) {
 	struct thread *curr = running_thread ();
 	struct thread *next = next_thread_to_run ();
 	
@@ -619,7 +659,8 @@ schedule (void) {
 	/* Mark us as running. */
 	next->status = THREAD_RUNNING;
 
-	/* Start new time slice. */
+	/* Start new time slice.
+		schedule을 통해 레디큐 다음 순번의 스레드가 실행되면, 정해진 time slice마다 인터럽트 시키려고 0 으로 초기화 */
 	thread_ticks = 0;
 
 #ifdef USERPROG

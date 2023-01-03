@@ -22,8 +22,8 @@ test_main (void)
   
   if ((pid = fork("child"))){
     wait (pid);
-
-    byte_cnt = read (handle, buffer + 20, sizeof sample - 21);
+    
+    byte_cnt = read(handle, buffer + 20, sizeof sample - 21);
     if (byte_cnt != sizeof sample - 21)
       fail ("read() returned %d instead of %zu", byte_cnt, sizeof sample - 21);
     else if (strcmp (sample, buffer)) {

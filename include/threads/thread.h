@@ -5,10 +5,14 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
+/* project2 */
+#define FDT_PAGES 3
+#define FDT_COUNT_LIMIT FDT_PAGES *(1<<9) // limit fdidx
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -91,9 +95,33 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int64_t wakeup_tick;	/* 추가 */
-	/* Shared between thread.c and synch.c. */
+	int pre_priority;					/* donate 받기 이전, 기존 우선순위 */
+	int64_t wakeup_tick;				/* 추가 */
 	struct list_elem elem;              /* List element. */
+	
+	// 해당 쓰레드가 대기하고 있는 lock 자료구조 주소 저장필드
+	struct lock* wait_on_lock;
+	struct list donations;
+	struct list_elem d_elem;
+	
+	/* project2 system call */
+	int exit_status;	// exit 할때 status 넣어주는 필드
+	struct file **fd_table;	// file descriptor table 의 시작 주소를 가르킴
+	int fd_idx;	//	fd table 의 open spot 의 index
+
+	struct intr_frame parent_if;	// 부모 쓰레드의 if
+	struct semaphore fork_sema;	// fork한 child의 load를 기다리는 용도
+
+	struct list child_list;	// parent가 가진 자식 쓰레드 리스트
+	struct list_elem child_elem;
+
+	struct semaphore wait_sema;
+	struct semaphore free_sema;
+
+	struct file *running;	// 이 스레드에서 실행시키고있는 파일
+
+	// int stdin_count;
+	// int stdout_count;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -132,7 +160,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
-void thread_sleep(int64_t ticks);
+void thread_sleep(int64_t ticks);	/* 재우는 함수 추가 */
 
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -142,13 +170,19 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* 비교 함수 */
+bool cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
+bool d_cmp_priority(const struct list_elem *a,
+const struct list_elem *b,void *aux UNUSED);
+
+/* 실행 중인 스레드를 레디큐 가장 앞녀석 우선순위 비교해서 더 작으면 yield 시키기 */
+void test_max_priority(void);
 
 void do_iret (struct intr_frame *tf);
-/* thread.c의
-next_tick_to_awake반환*/
+/* thread.c의 next_tick_to_awake반환*/
 int64_t get_next_tick_to_awake(void);
- /*최소틱을가진
-스레드저장*/
+ /*최소틱을가진 스레드저장*/
 void update_next_tick_to_awake(int64_t ticks);
 /* 슬립큐에서깨워야할스레드를깨움*/
 void thread_awake(int64_t ticks); 

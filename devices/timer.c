@@ -29,7 +29,6 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -44,7 +43,6 @@ timer_init (void) {
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
-
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
 void
@@ -88,17 +86,20 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
+/* 
+ * Suspends execution for approximately TICKS timer ticks.
+ * Nsure: if문이 정녕 필요 없는지
+ */
 void timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
 	// if (timer_elapsed (start) < ticks){
-		thread_sleep(start + ticks);	// sleep que에 넣어줌
-		
-		// 	// global tick 갱신
+
+		/* 스레드 계속 몰아넣지말고 재우기 */
+		thread_sleep(start + ticks);
+
 	// }
-		// thread_yield ();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -132,7 +133,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	if (ticks >= get_next_tick_to_awake())
 		thread_awake(ticks);
 	
-	thread_tick ();
+	thread_tick ();	/* timer interrupt가 1틱마다 일어나기에 실행중인 스레드의 time slice도 1틱 증가 */
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

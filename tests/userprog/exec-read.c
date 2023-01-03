@@ -8,8 +8,7 @@
 #include "tests/lib.h"
 #include "tests/main.h"
 
-void
-test_main (void) 
+void test_main (void) 
 {
   pid_t pid;
   int handle;
@@ -17,10 +16,10 @@ test_main (void)
   char *buffer;
 
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
-  buffer = get_boundary_area () - sizeof sample / 2;
+  buffer = get_boundary_area() - sizeof sample / 2;
+
   CHECK ((byte_cnt = read (handle, buffer, 20)) == 20,
          "read \"sample.txt\" first 20 bytes");
-
   
   if ((pid = fork ("child-read"))){
     wait (pid);
